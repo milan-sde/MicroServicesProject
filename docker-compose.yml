@@ -3,7 +3,7 @@ version: '3.8'
 services:
   nginx:
     image: nginx:latest
-    container_name: api-gateway
+    container_name: nginx
     ports:
       - "80:80"
     volumes:
@@ -24,7 +24,7 @@ services:
       - "3001:3000"
     environment:
       - PORT=3000
-      - DB_HOST=user-db
+      - MONGODB_URI=mongodb://user-db:27017/user-service
     depends_on:
       - user-db
     networks:
@@ -37,7 +37,7 @@ services:
       - "3002:3000"
     environment:
       - PORT=3000
-      - DB_HOST=product-db
+      - MONGODB_URI=mongodb://product-db:27017/product-service
     depends_on:
       - product-db
     networks:
@@ -50,7 +50,7 @@ services:
       - "3003:3000"
     environment:
       - PORT=3000
-      - DB_HOST=order-db
+      - MONGODB_URI=mongodb://order-db:27017/order-service
     depends_on:
       - order-db
     networks:
@@ -63,7 +63,7 @@ services:
       - "3004:3000"
     environment:
       - PORT=3000
-      - DB_HOST=inventory-db
+      - MONGODB_URI=mongodb://inventory-db:27017/inventory-service
     depends_on:
       - inventory-db
     networks:
@@ -76,27 +76,14 @@ services:
       - "3005:3000"
     environment:
       - PORT=3000
-      - DB_HOST=payment-db
+      - MONGODB_URI=mongodb://payment-db:27017/payment-service
     depends_on:
       - payment-db
     networks:
       - smart-order-network
 
-  client:
-    build: ./client
-    container_name: react-client
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./client:/app
-      - /app/node_modules
-    environment:
-      - REACT_APP_API_URL=http://localhost
-    networks:
-      - smart-order-network
-
   user-db:
-    image: mongo:latest
+    image: mongo:6.0
     container_name: user-db
     ports:
       - "27017:27017"
@@ -106,7 +93,7 @@ services:
       - smart-order-network
 
   product-db:
-    image: mongo:latest
+    image: mongo:6.0
     container_name: product-db
     ports:
       - "27018:27017"
@@ -116,7 +103,7 @@ services:
       - smart-order-network
 
   order-db:
-    image: mongo:latest
+    image: mongo:6.0
     container_name: order-db
     ports:
       - "27019:27017"
@@ -126,7 +113,7 @@ services:
       - smart-order-network
 
   inventory-db:
-    image: mongo:latest
+    image: mongo:6.0
     container_name: inventory-db
     ports:
       - "27020:27017"
@@ -136,7 +123,7 @@ services:
       - smart-order-network
 
   payment-db:
-    image: mongo:latest
+    image: mongo:6.0
     container_name: payment-db
     ports:
       - "27021:27017"
