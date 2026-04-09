@@ -1,0 +1,157 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    container_name: api-gateway
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf:/etc/nginx/conf.d
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+      - inventory-service
+      - payment-service
+    networks:
+      - smart-order-network
+
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    ports:
+      - "3001:3000"
+    environment:
+      - PORT=3000
+      - DB_HOST=user-db
+    depends_on:
+      - user-db
+    networks:
+      - smart-order-network
+
+  product-service:
+    build: ./product-service
+    container_name: product-service
+    ports:
+      - "3002:3000"
+    environment:
+      - PORT=3000
+      - DB_HOST=product-db
+    depends_on:
+      - product-db
+    networks:
+      - smart-order-network
+
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    ports:
+      - "3003:3000"
+    environment:
+      - PORT=3000
+      - DB_HOST=order-db
+    depends_on:
+      - order-db
+    networks:
+      - smart-order-network
+
+  inventory-service:
+    build: ./inventory-service
+    container_name: inventory-service
+    ports:
+      - "3004:3000"
+    environment:
+      - PORT=3000
+      - DB_HOST=inventory-db
+    depends_on:
+      - inventory-db
+    networks:
+      - smart-order-network
+
+  payment-service:
+    build: ./payment-service
+    container_name: payment-service
+    ports:
+      - "3005:3000"
+    environment:
+      - PORT=3000
+      - DB_HOST=payment-db
+    depends_on:
+      - payment-db
+    networks:
+      - smart-order-network
+
+  client:
+    build: ./client
+    container_name: react-client
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost
+    networks:
+      - smart-order-network
+
+  user-db:
+    image: mongo:latest
+    container_name: user-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - user-db-data:/data/db
+    networks:
+      - smart-order-network
+
+  product-db:
+    image: mongo:latest
+    container_name: product-db
+    ports:
+      - "27018:27017"
+    volumes:
+      - product-db-data:/data/db
+    networks:
+      - smart-order-network
+
+  order-db:
+    image: mongo:latest
+    container_name: order-db
+    ports:
+      - "27019:27017"
+    volumes:
+      - order-db-data:/data/db
+    networks:
+      - smart-order-network
+
+  inventory-db:
+    image: mongo:latest
+    container_name: inventory-db
+    ports:
+      - "27020:27017"
+    volumes:
+      - inventory-db-data:/data/db
+    networks:
+      - smart-order-network
+
+  payment-db:
+    image: mongo:latest
+    container_name: payment-db
+    ports:
+      - "27021:27017"
+    volumes:
+      - payment-db-data:/data/db
+    networks:
+      - smart-order-network
+
+networks:
+  smart-order-network:
+    driver: bridge
+
+volumes:
+  user-db-data:
+  product-db-data:
+  order-db-data:
+  inventory-db-data:
+  payment-db-data:
