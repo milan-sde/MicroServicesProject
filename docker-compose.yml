@@ -1,144 +1,145 @@
 version: '3.8'
 
 services:
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - app-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   nginx:
-    image: nginx:latest
-    container_name: nginx
+    image: nginx:alpine
+    container_name: nginx-gateway
     ports:
       - "80:80"
     volumes:
-      - ./nginx/conf:/etc/nginx/conf.d
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - user-service
       - product-service
       - order-service
-      - inventory-service
-      - payment-service
     networks:
-      - smart-order-network
+      - app-network
 
   user-service:
-    build: ./user-service
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
     container_name: user-service
     ports:
-      - "3001:3000"
+      - "3001:3001"
     environment:
-      - PORT=3000
-      - MONGODB_URI=mongodb://user-db:27017/user-service
+      - PORT=3001
+      - MONGODB_URI=mongodb://mongodb:27017/usersdb
+      - JWT_SECRET=supersecretkey123
+      - ADMIN_EMAILS=admin@example.com
     depends_on:
-      - user-db
+      mongodb:
+        condition: service_healthy
     networks:
-      - smart-order-network
+      - app-network
 
   product-service:
-    build: ./product-service
+    build:
+      context: ./product-service
+      dockerfile: Dockerfile
     container_name: product-service
     ports:
-      - "3002:3000"
+      - "3002:3002"
+    volumes:
+      - ./proto:/proto:ro
     environment:
-      - PORT=3000
-      - MONGODB_URI=mongodb://product-db:27017/product-service
+      - PORT=3002
+      - MONGODB_URI=mongodb://mongodb:27017/productsdb
+      - JWT_SECRET=supersecretkey123
+      - INVENTORY_SERVICE_HOST=inventory-service
+      - INVENTORY_SERVICE_PORT=3004
     depends_on:
-      - product-db
+      mongodb:
+        condition: service_healthy
     networks:
-      - smart-order-network
-
-  order-service:
-    build: ./order-service
-    container_name: order-service
-    ports:
-      - "3003:3000"
-    environment:
-      - PORT=3000
-      - MONGODB_URI=mongodb://order-db:27017/order-service
-    depends_on:
-      - order-db
-    networks:
-      - smart-order-network
+      - app-network
 
   inventory-service:
-    build: ./inventory-service
+    build:
+      context: ./inventory-service
+      dockerfile: Dockerfile
     container_name: inventory-service
     ports:
-      - "3004:3000"
+      - "3004:3004"
+    volumes:
+      - ./proto:/proto:ro
     environment:
-      - PORT=3000
-      - MONGODB_URI=mongodb://inventory-db:27017/inventory-service
+      - PORT=3004
+      - MONGODB_URI=mongodb://mongodb:27017/inventorydb
     depends_on:
-      - inventory-db
+      mongodb:
+        condition: service_healthy
     networks:
-      - smart-order-network
+      - app-network
 
   payment-service:
-    build: ./payment-service
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
     container_name: payment-service
     ports:
-      - "3005:3000"
+      - "3005:3005"
+    volumes:
+      - ./proto:/proto:ro
     environment:
-      - PORT=3000
-      - MONGODB_URI=mongodb://payment-db:27017/payment-service
+      - PORT=3005
+      - MONGODB_URI=mongodb://mongodb:27017/paymentsdb
     depends_on:
-      - payment-db
+      mongodb:
+        condition: service_healthy
     networks:
-      - smart-order-network
+      - app-network
 
-  user-db:
-    image: mongo:6.0
-    container_name: user-db
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile
+    container_name: order-service
     ports:
-      - "27017:27017"
+      - "3003:3003"
     volumes:
-      - user-db-data:/data/db
+      - ./proto:/proto:ro
+    environment:
+      - PORT=3003
+      - MONGODB_URI=mongodb://mongodb:27017/ordersdb
+      - INVENTORY_SERVICE_HOST=inventory-service
+      - INVENTORY_SERVICE_PORT=3004
+      - PAYMENT_SERVICE_HOST=payment-service
+      - PAYMENT_SERVICE_PORT=3005
+    depends_on:
+      mongodb:
+        condition: service_healthy
     networks:
-      - smart-order-network
+      - app-network
 
-  product-db:
-    image: mongo:6.0
-    container_name: product-db
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
     ports:
-      - "27018:27017"
-    volumes:
-      - product-db-data:/data/db
+      - "3000:3000"
     networks:
-      - smart-order-network
-
-  order-db:
-    image: mongo:6.0
-    container_name: order-db
-    ports:
-      - "27019:27017"
-    volumes:
-      - order-db-data:/data/db
-    networks:
-      - smart-order-network
-
-  inventory-db:
-    image: mongo:6.0
-    container_name: inventory-db
-    ports:
-      - "27020:27017"
-    volumes:
-      - inventory-db-data:/data/db
-    networks:
-      - smart-order-network
-
-  payment-db:
-    image: mongo:6.0
-    container_name: payment-db
-    ports:
-      - "27021:27017"
-    volumes:
-      - payment-db-data:/data/db
-    networks:
-      - smart-order-network
+      - app-network
 
 networks:
-  smart-order-network:
+  app-network:
     driver: bridge
 
 volumes:
-  user-db-data:
-  product-db-data:
-  order-db-data:
-  inventory-db-data:
-  payment-db-data:
+  mongodb_data:
