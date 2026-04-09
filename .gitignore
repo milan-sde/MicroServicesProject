@@ -1,0 +1,120 @@
+# =========================
+# 📦 NODE MODULES
+# =========================
+node_modules/
+**/node_modules/
+
+# =========================
+# 🏗 BUILD OUTPUTS
+# =========================
+dist/
+build/
+coverage/
+out/
+.next/
+.nuxt/
+**/dist/
+**/build/
+**/.next/
+**/.nuxt/
+
+# =========================
+# 📄 LOG FILES
+# =========================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# =========================
+# 🔐 ENVIRONMENT FILES
+# =========================
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example   # keep example file
+
+# =========================
+# 💻 OS & EDITOR FILES
+# =========================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+
+# JetBrains
+.idea/
+
+# =========================
+# ⚡ CACHE & TEMP FILES
+# =========================
+.cache/
+.vite/
+.eslintcache
+.stylelintcache
+**/.cache/
+**/.vite/
+
+# =========================
+# 🐳 DOCKER
+# =========================
+docker-data/
+*.pid
+*.seed
+*.pid.lock
+
+# =========================
+# 🗄 DATABASE FILES
+# =========================
+*.db
+*.sqlite
+*.sqlite3
+
+# Mongo local dumps (if any)
+dump/
+*.bson
+*.json
+
+# =========================
+# 📦 PACKAGE MANAGERS
+# =========================
+.pnpm-store/
+.npm/
+.yarn/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# =========================
+# 🔒 SECURITY
+# =========================
+*.pem
+*.key
+*.crt
+*.csr
+
+# =========================
+# 🧪 TEST FILES (optional)
+# =========================
+coverage/
+jest-cache/
+
+# =========================
+# 📁 MISC
+# =========================
+tmp/
+temp/
+*.cache

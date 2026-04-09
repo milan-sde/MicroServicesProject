@@ -60,6 +60,7 @@ services:
     environment:
       - PORT=3002
       - MONGODB_URI=mongodb://mongodb:27017/productsdb
+      - INVENTORY_MONGODB_URI=mongodb://mongodb:27017/inventorydb
       - JWT_SECRET=supersecretkey123
       - INVENTORY_SERVICE_HOST=inventory-service
       - INVENTORY_SERVICE_PORT=3004
@@ -129,11 +130,11 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ./client
       dockerfile: Dockerfile
     container_name: frontend
     ports:
-      - "3000:3000"
+      - "3000:80"
     networks:
       - app-network
 

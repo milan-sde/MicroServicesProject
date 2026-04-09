@@ -11,6 +11,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3002;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/productsdb';
+const INVENTORY_MONGODB_URI = process.env.INVENTORY_MONGODB_URI || MONGODB_URI.replace('productsdb', 'inventorydb');
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey123';
 const INVENTORY_SERVICE_HOST = process.env.INVENTORY_SERVICE_HOST || 'inventory-service';
 const INVENTORY_SERVICE_PORT = process.env.INVENTORY_SERVICE_PORT || 3004;
@@ -19,6 +20,12 @@ const INVENTORY_PROTO_PATH = '/proto/inventory.proto';
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('Connected to MongoDB - Products collection'))
   .catch(err => console.error('MongoDB connection error:', err));
+
+const inventoryDbConnection = mongoose.createConnection(INVENTORY_MONGODB_URI);
+inventoryDbConnection
+  .asPromise()
+  .then(() => console.log('Connected to MongoDB - Inventory collection (read model)'))
+  .catch(err => console.error('Inventory read model connection error:', err));
 
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -29,6 +36,33 @@ const productSchema = new mongoose.Schema({
 });
 
 const Product = mongoose.model('Product', productSchema);
+
+const inventoryReadSchema = new mongoose.Schema({
+  productId: { type: String, required: true, unique: true },
+  stock: { type: Number, required: true, default: 0 },
+  updatedAt: { type: Date, default: Date.now }
+}, { collection: 'inventories' });
+
+const InventoryRead = inventoryDbConnection.model('InventoryRead', inventoryReadSchema);
+
+async function enrichProductsWithLiveStock(products) {
+  if (!products.length) {
+    return [];
+  }
+
+  const ids = products.map(item => item._id.toString());
+  const inventoryDocs = await InventoryRead.find({ productId: { $in: ids } }).lean();
+  const stockByProductId = new Map(inventoryDocs.map(item => [item.productId, item.stock]));
+
+  return products.map(item => {
+    const plain = item.toObject ? item.toObject() : item;
+    const liveStock = stockByProductId.get(plain._id.toString());
+    return {
+      ...plain,
+      stock: Number.isFinite(liveStock) ? liveStock : plain.stock
+    };
+  });
+}
 
 const inventoryPackage = protoLoader.loadSync(INVENTORY_PROTO_PATH, {
   keepCase: true,
@@ -86,6 +120,10 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+async function removeInventoryRecord(productId) {
+  await InventoryRead.deleteOne({ productId });
+}
+
 app.post('/products', authenticate, requireAdmin, async (req, res) => {
   try {
     const { name, description, price, stock } = req.body;
@@ -121,8 +159,9 @@ app.post('/products', authenticate, requireAdmin, async (req, res) => {
 app.get('/products', async (req, res) => {
   try {
     const products = await Product.find();
+    const productsWithLiveStock = await enrichProductsWithLiveStock(products);
     console.log('Products retrieved:', products.length);
-    res.json({ products });
+    res.json({ products: productsWithLiveStock });
   } catch (error) {
     console.error('Get products error:', error);
     res.status(500).json({ message: 'Server error' });
@@ -135,8 +174,31 @@ app.get('/products/:id', async (req, res) => {
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
     }
-    res.json({ product });
+
+    const [productWithLiveStock] = await enrichProductsWithLiveStock([product]);
+    res.json({ product: productWithLiveStock });
   } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.delete('/products/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    await Product.findByIdAndDelete(req.params.id);
+    await removeInventoryRecord(req.params.id);
+
+    res.json({
+      message: 'Product deleted successfully',
+      productId: req.params.id
+    });
+  } catch (error) {
+    console.error('Delete product error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
