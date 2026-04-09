@@ -4,6 +4,7 @@ const cors = require('cors');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
+const stompit = require('stompit');
 
 const app = express();
 app.use(cors());
@@ -16,6 +17,99 @@ const INVENTORY_SERVICE_HOST = process.env.INVENTORY_SERVICE_HOST || 'localhost'
 const INVENTORY_SERVICE_PORT = process.env.INVENTORY_SERVICE_PORT || 3004;
 const PAYMENT_SERVICE_HOST = process.env.PAYMENT_SERVICE_HOST || 'localhost';
 const PAYMENT_SERVICE_PORT = process.env.PAYMENT_SERVICE_PORT || 3005;
+const ACTIVEMQ_URL = process.env.ACTIVEMQ_URL || 'tcp://activemq:61616';
+const ORDER_QUEUE = process.env.ORDER_QUEUE || 'order.queue';
+const ACTIVEMQ_RETRY_DELAY_MS = Number(process.env.ACTIVEMQ_RETRY_DELAY_MS || 5000);
+
+function parseBrokerUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const basePort = Number(parsed.port || 61616);
+    const ports = basePort === 61616 ? [61616, 61613] : [basePort];
+
+    return {
+      host: parsed.hostname,
+      ports,
+      connectHeaders: {
+        host: '/',
+        login: parsed.username || 'admin',
+        passcode: parsed.password || 'admin',
+      },
+    };
+  } catch {
+    return {
+      host: 'activemq',
+      ports: [61616, 61613],
+      connectHeaders: {
+        host: '/',
+        login: 'admin',
+        passcode: 'admin',
+      },
+    };
+  }
+}
+
+const stompConnectOptions = parseBrokerUrl(ACTIVEMQ_URL);
+
+function connectStompWithRetry() {
+  return new Promise((resolve) => {
+    const tryConnect = () => {
+      const ports = [...stompConnectOptions.ports];
+
+      const tryPort = () => {
+        const port = ports.shift();
+
+        if (!port) {
+          setTimeout(tryConnect, ACTIVEMQ_RETRY_DELAY_MS);
+          return;
+        }
+
+        stompit.connect(
+          {
+            host: stompConnectOptions.host,
+            port,
+            connectHeaders: stompConnectOptions.connectHeaders,
+          },
+          (error, client) => {
+            if (error) {
+              console.error(`ActiveMQ connection failed on port ${port}. Retrying...`, error.message);
+              tryPort();
+              return;
+            }
+            resolve(client);
+          }
+        );
+      };
+
+      tryPort();
+    };
+
+    tryConnect();
+  });
+}
+
+async function sendMessage(queue, message) {
+  const client = await connectStompWithRetry();
+
+  return new Promise((resolve, reject) => {
+    try {
+      const frame = client.send({
+        destination: `/queue/${queue}`,
+        'content-type': 'application/json',
+      });
+
+      frame.write(JSON.stringify(message));
+      frame.end();
+
+      client.disconnect();
+      console.log('Message sent to ActiveMQ');
+      resolve();
+    } catch (error) {
+      client.disconnect();
+      reject(error);
+    }
+  });
+}
 
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('Connected to MongoDB - Orders collection'))
@@ -148,6 +242,15 @@ app.post('/orders', async (req, res) => {
 
     await order.save();
     console.log('Order completed:', order._id);
+
+    sendMessage(ORDER_QUEUE, {
+        event: 'ORDER_PLACED',
+        orderId: order._id.toString(),
+        productId: products[0]?.productId || null,
+        status: 'SUCCESS'
+      }).catch((mqError) => {
+        console.error('Failed to publish order event:', mqError.message);
+      });
     
     res.status(201).json({
       message: 'Order placed successfully',

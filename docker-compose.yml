@@ -1,6 +1,15 @@
 version: '3.8'
 
 services:
+  activemq:
+    image: rmohr/activemq
+    container_name: activemq
+    ports:
+      - "61616:61616"
+      - "8161:8161"
+    networks:
+      - app-network
+
   mongodb:
     image: mongo:7
     container_name: mongodb
@@ -122,9 +131,27 @@ services:
       - INVENTORY_SERVICE_PORT=3004
       - PAYMENT_SERVICE_HOST=payment-service
       - PAYMENT_SERVICE_PORT=3005
+      - ACTIVEMQ_URL=tcp://activemq:61616
+      - ORDER_QUEUE=order.queue
     depends_on:
       mongodb:
         condition: service_healthy
+      activemq:
+        condition: service_started
+    networks:
+      - app-network
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    environment:
+      - ACTIVEMQ_URL=tcp://activemq:61616
+      - ORDER_QUEUE=order.queue
+    depends_on:
+      activemq:
+        condition: service_started
     networks:
       - app-network
 
