@@ -5,6 +5,7 @@ const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
 const path = require('path');
 const stompit = require('stompit');
+const CircuitBreaker = require('opossum');
 
 const app = express();
 app.use(cors());
@@ -157,6 +158,7 @@ const paymentProto = grpc.loadPackageDefinition(paymentPackage).payment;
 
 let inventoryClient;
 let paymentClient;
+let paymentCircuitBreaker;
 
 function initializeGrpcClients() {
   inventoryClient = new inventoryProto.InventoryService(
@@ -172,7 +174,45 @@ function initializeGrpcClients() {
   console.log('gRPC clients initialized');
 }
 
+function processPayment(orderId, amount) {
+  console.log('Calling Payment Service');
+
+  return new Promise((resolve, reject) => {
+    paymentClient.ProcessPayment({
+      order_id: orderId,
+      amount,
+    }, (err, response) => {
+      if (err) {
+        return reject(err);
+      }
+
+      return resolve(response);
+    });
+  });
+}
+
+function initializeCircuitBreaker() {
+  paymentCircuitBreaker = new CircuitBreaker(processPayment, {
+    timeout: 3000,
+    errorThresholdPercentage: 50,
+    resetTimeout: 5000,
+  });
+
+  paymentCircuitBreaker.fallback(() => {
+    console.log('Fallback executed');
+    return {
+      status: 'FAILED',
+      message: 'Payment service unavailable',
+    };
+  });
+
+  paymentCircuitBreaker.on('open', () => {
+    console.log('Circuit breaker triggered');
+  });
+}
+
 initializeGrpcClients();
+initializeCircuitBreaker();
 
 app.post('/orders', async (req, res) => {
   try {
@@ -199,12 +239,10 @@ app.post('/orders', async (req, res) => {
     await order.save();
     console.log('Order created:', order._id);
 
-    let inventoryAvailable = true;
     for (const item of products) {
       const stockCheck = await checkInventory(item.productId, item.quantity);
       if (!stockCheck.available) {
-        inventoryAvailable = false;
-        order.status = 'failed';
+        order.status = 'FAILED';
         order.inventoryChecked = true;
         await order.save();
         return res.status(400).json({
@@ -218,23 +256,24 @@ app.post('/orders', async (req, res) => {
     await order.save();
     console.log('Inventory checked for order:', order._id);
 
-    await new Promise((resolve, reject) => {
-      paymentClient.ProcessPayment({
-        order_id: order._id.toString(),
-        amount: totalAmount
-      }, (err, response) => {
-        if (err) {
-          console.error('Payment error:', err);
-          reject(err);
-          return;
-        }
-        console.log('Payment processed for order:', order._id);
-        order.paymentProcessed = true;
-        order.transactionId = response.transaction_id || response.transactionId;
-        order.status = 'completed';
-        resolve();
+    const paymentResponse = await paymentCircuitBreaker.fire(order._id.toString(), totalAmount);
+
+    if (!paymentResponse?.success) {
+      order.paymentProcessed = false;
+      order.status = 'FAILED';
+      await order.save();
+
+      return res.status(503).json({
+        status: 'FAILED',
+        message: 'Payment service unavailable',
+        order,
       });
-    });
+    }
+
+    console.log('Payment processed for order:', order._id);
+    order.paymentProcessed = true;
+    order.transactionId = paymentResponse.transaction_id || paymentResponse.transactionId;
+    order.status = 'SUCCESS';
 
     for (const item of products) {
       await updateInventory(item.productId, item.quantity, false);
