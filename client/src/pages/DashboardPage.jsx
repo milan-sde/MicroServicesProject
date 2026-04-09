@@ -13,6 +13,7 @@ function DashboardPage({ auth }) {
   const [activeTab, setActiveTab] = useState('products')
   const [products, setProducts] = useState([])
   const [quantities, setQuantities] = useState({})
+  const [stockIncrements, setStockIncrements] = useState({})
   const [orders, setOrders] = useState([])
   const [profile, setProfile] = useState(auth.user)
   const [productsLoading, setProductsLoading] = useState(true)
@@ -21,6 +22,7 @@ function DashboardPage({ auth }) {
   const [orderingProductId, setOrderingProductId] = useState(null)
   const [creatingProduct, setCreatingProduct] = useState(false)
   const [deletingProductId, setDeletingProductId] = useState(null)
+  const [increasingProductId, setIncreasingProductId] = useState(null)
 
   const isAdmin = (profile?.role || auth.user?.role) === 'admin'
 
@@ -38,10 +40,13 @@ function DashboardPage({ auth }) {
       setProducts(items)
 
       const initial = {}
+      const initialIncrements = {}
       for (const item of items) {
         initial[item._id] = 1
+        initialIncrements[item._id] = 1
       }
       setQuantities(initial)
+      setStockIncrements(initialIncrements)
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to fetch products')
     } finally {
@@ -90,6 +95,14 @@ function DashboardPage({ auth }) {
     }))
   }
 
+  function onIncreaseAmountChange(productId, value) {
+    const next = Number(value)
+    setStockIncrements((prev) => ({
+      ...prev,
+      [productId]: Number.isFinite(next) && next > 0 ? Math.floor(next) : 1,
+    }))
+  }
+
   async function placeOrder(product) {
     const userId = profile?.id || profile?._id || auth.user?.id || auth.user?._id
     if (!userId) {
@@ -101,7 +114,7 @@ function DashboardPage({ auth }) {
     setOrderingProductId(product._id)
 
     try {
-      await api.post('/orders', {
+      const { data } = await api.post('/orders', {
         userId,
         products: [
           {
@@ -113,12 +126,21 @@ function DashboardPage({ auth }) {
         ],
       })
 
+      if (data?.status === 'FAILED') {
+        toast.error('Payment service unavailable, try later')
+        return
+      }
+
       toast.success('Order placed successfully')
       await fetchProducts()
       await fetchOrders()
     } catch (error) {
-      const message = error.response?.data?.message || 'Order failed'
-      toast.error(message)
+      if (error.response?.data?.status === 'FAILED') {
+        toast.error('Payment service unavailable, try later')
+      } else {
+        const message = error.response?.data?.message || 'Order failed'
+        toast.error(message)
+      }
     } finally {
       setOrderingProductId(null)
     }
@@ -156,6 +178,20 @@ function DashboardPage({ auth }) {
     }
   }
 
+  async function increaseStock(product) {
+    const quantity = stockIncrements[product._id] || 1
+    setIncreasingProductId(product._id)
+    try {
+      await api.patch(`/products/${product._id}/stock/increase`, { quantity })
+      toast.success('Stock increased successfully')
+      await fetchProducts()
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to increase stock')
+    } finally {
+      setIncreasingProductId(null)
+    }
+  }
+
   const productGrid = useMemo(() => {
     if (!products.length && !productsLoading) {
       return (
@@ -166,7 +202,7 @@ function DashboardPage({ auth }) {
     }
 
     return (
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         {products.map((product) => (
           <ProductCard
             key={product._id}
@@ -174,15 +210,29 @@ function DashboardPage({ auth }) {
             quantity={quantities[product._id] || 1}
             onQuantityChange={onQuantityChange}
             onOrder={placeOrder}
-            isOrdering={orderingProductId === product._id}
+            isOrdering={Boolean(orderingProductId) && orderingProductId === product._id}
             onDelete={deleteProduct}
             isDeleting={deletingProductId === product._id}
             canDelete={isAdmin}
+            canIncrease={isAdmin}
+            increaseAmount={stockIncrements[product._id] || 1}
+            onIncreaseAmountChange={onIncreaseAmountChange}
+            onIncreaseStock={increaseStock}
+            isIncreasing={increasingProductId === product._id}
           />
         ))}
       </div>
     )
-  }, [products, quantities, productsLoading, orderingProductId, deletingProductId, isAdmin])
+  }, [
+    products,
+    quantities,
+    productsLoading,
+    orderingProductId,
+    deletingProductId,
+    isAdmin,
+    stockIncrements,
+    increasingProductId,
+  ])
 
   const orderList = useMemo(() => {
     if (!orders.length && !ordersLoading) {
@@ -194,7 +244,7 @@ function DashboardPage({ auth }) {
     }
 
     return (
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         {orders.map((order) => (
           <OrderCard key={order._id} order={order} />
         ))}
@@ -203,13 +253,17 @@ function DashboardPage({ auth }) {
   }, [orders, ordersLoading])
 
   return (
-    <div className="min-h-screen">
-      <Navbar userEmail={auth.user?.email} onLogout={onLogout} />
+    <div className="min-h-screen text-slate-900">
+      <Navbar
+        userEmail={auth.user?.email}
+        userName={profile?.username}
+        onLogout={onLogout}
+      />
 
       <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900">Product Dashboard</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Product Dashboard</h1>
             <p className="mt-1 text-sm text-slate-600">
               Complete control panel for products, orders, and user profile.
             </p>

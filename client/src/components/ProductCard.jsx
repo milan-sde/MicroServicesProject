@@ -1,6 +1,20 @@
 import { ShoppingCart, Trash2 } from 'lucide-react'
 
-function ProductCard({ product, quantity, onQuantityChange, onOrder, isOrdering, onDelete, isDeleting, canDelete }) {
+function ProductCard({
+  product,
+  quantity,
+  onQuantityChange,
+  onOrder,
+  isOrdering,
+  onDelete,
+  isDeleting,
+  canDelete,
+  canIncrease,
+  increaseAmount,
+  onIncreaseAmountChange,
+  onIncreaseStock,
+  isIncreasing,
+}) {
   return (
     <article className="glass-card p-5 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-amber-200/40">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -47,6 +61,29 @@ function ProductCard({ product, quantity, onQuantityChange, onOrder, isOrdering,
           <Trash2 className="h-4 w-4" />
           {isDeleting ? 'Deleting...' : 'Delete Product'}
         </button>
+      ) : null}
+
+      {canIncrease ? (
+        <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">Admin Stock Control</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min="1"
+              value={increaseAmount}
+              onChange={(e) => onIncreaseAmountChange(product._id, e.target.value)}
+              className="w-20 rounded-lg border border-stone-300 bg-white px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-teal-600"
+            />
+            <button
+              type="button"
+              onClick={() => onIncreaseStock(product)}
+              disabled={isIncreasing}
+              className="btn-secondary flex-1"
+            >
+              {isIncreasing ? 'Updating...' : 'Increase Stock'}
+            </button>
+          </div>
+        </div>
       ) : null}
     </article>
   )

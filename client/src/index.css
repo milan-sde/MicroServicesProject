@@ -11,10 +11,6 @@
 @layer base {
   body {
     @apply min-h-screen bg-stone-100 text-slate-900 antialiased;
-    background-image:
-      radial-gradient(circle at 10% 20%, rgba(251, 191, 36, 0.2), transparent 45%),
-      radial-gradient(circle at 90% 0%, rgba(34, 197, 94, 0.15), transparent 35%),
-      radial-gradient(circle at 50% 100%, rgba(15, 118, 110, 0.18), transparent 30%);
   }
 
   #root {
@@ -24,7 +20,7 @@
 
 @layer components {
   .glass-card {
-    @apply rounded-2xl border border-white/60 bg-white/80 shadow-xl shadow-amber-100/40 backdrop-blur-sm;
+    @apply rounded-2xl border border-white/60 bg-white/90 shadow-md shadow-amber-100/30 backdrop-blur-sm;
   }
 
   .btn-primary {

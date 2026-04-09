@@ -19,6 +19,20 @@ createRoot(document.getElementById('root')).render(
             background: '#fffcf8',
             color: '#1f2937',
           },
+          success: {
+            style: {
+              border: '1px solid #86efac',
+              background: '#f0fdf4',
+              color: '#166534',
+            },
+          },
+          error: {
+            style: {
+              border: '1px solid #fca5a5',
+              background: '#fef2f2',
+              color: '#991b1b',
+            },
+          },
         }}
       />
     </BrowserRouter>

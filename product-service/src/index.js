@@ -96,6 +96,24 @@ function initializeInventory(productId, stock) {
   });
 }
 
+function increaseInventory(productId, quantity) {
+  return new Promise((resolve, reject) => {
+    inventoryClient.UpdateStock(
+      {
+        product_id: productId,
+        quantity,
+        increase: true
+      },
+      (err, response) => {
+        if (err) {
+          return reject(err);
+        }
+        resolve(response);
+      }
+    );
+  });
+}
+
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -179,6 +197,37 @@ app.get('/products/:id', async (req, res) => {
     res.json({ product: productWithLiveStock });
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+app.patch('/products/:id/stock/increase', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const quantity = Number(req.body?.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      return res.status(400).json({ message: 'Quantity must be a positive integer' });
+    }
+
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    const inventoryResponse = await increaseInventory(req.params.id, quantity);
+    const newStock = Number(inventoryResponse?.new_stock ?? inventoryResponse?.newStock);
+
+    if (Number.isFinite(newStock)) {
+      product.stock = newStock;
+      await product.save();
+    }
+
+    res.json({
+      message: 'Stock increased successfully',
+      productId: req.params.id,
+      newStock: Number.isFinite(newStock) ? newStock : product.stock,
+    });
+  } catch (error) {
+    console.error('Increase stock error:', error);
+    res.status(502).json({ message: 'Failed to increase stock' });
   }
 });
 
